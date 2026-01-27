@@ -1,7 +1,7 @@
 # Infrastructure
 
 ## Purpose
-מה השירות עושה בקצרה
+
 
 ## Tech Stack
 
