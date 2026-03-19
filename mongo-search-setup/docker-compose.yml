@@ -1,0 +1,101 @@
+services:
+
+  # ── Step 1: generate the keyfile + password file, fix ownership ──────────────
+  keyfile-init:
+    image: alpine
+    volumes:
+      - keyfile:/keyfile
+      - passwordfile:/passwordfile
+    command: >
+      sh -c "
+        apk add --no-cache openssl &&
+
+        openssl rand -base64 756 > /keyfile/keyfile &&
+        chown -R 101:101 /keyfile &&
+        chmod 400 /keyfile/keyfile &&
+
+        printf 'mongot' > /passwordfile/passwordfile.clean &&
+        chown -R 101:101 /passwordfile &&
+        chmod 600 /passwordfile/passwordfile.clean &&
+
+        echo '✅  Keyfile + passwordfile ready'
+      "
+
+  # ── Step 2: MongoDB Community Server ─────────────────────────────────────────
+  mongod:
+    image: mongodb/mongodb-community-server:latest
+    container_name: mongod
+    hostname: mongod
+    depends_on:
+      keyfile-init:
+        condition: service_completed_successfully
+    environment:
+      MONGODB_INITDB_ROOT_USERNAME: admin
+      MONGODB_INITDB_ROOT_PASSWORD: admin
+    volumes:
+      - keyfile:/keyfile:ro
+      - ./config/mongod.conf:/etc/mongod.conf:ro
+      - ./scripts/rs-init.sh:/rs-init.sh:ro
+      - mongodata:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      search-community:
+        aliases:
+          - mongod.search-community
+    command: ["--config", "/etc/mongod.conf"]
+    healthcheck:
+      test: >
+        mongosh --quiet --eval "db.adminCommand('ping').ok"
+        --username admin --password admin --authenticationDatabase admin
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # ── Step 3: run rs.initiate() + createUser inside the mongod container ────────
+  mongod-rs-init:
+    image: docker:cli
+    container_name: mongod-rs-init
+    depends_on:
+      mongod:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./scripts/rs-init.sh:/rs-init.sh:ro
+    entrypoint: >
+      sh -c "docker exec mongod bash /rs-init.sh"
+
+  # ── Step 4: mongot (Atlas Search engine) ─────────────────────────────────────
+  mongot:
+    image: mongodb/mongodb-community-search:latest
+    container_name: mongot-community
+    hostname: mongot-community
+    depends_on:
+      mongod-rs-init:
+        condition: service_completed_successfully
+    volumes:
+      - keyfile:/keyfile:ro
+      - passwordfile:/passwordfile:ro
+      - mongotdata:/data/mongot
+      - ./config/mongot.conf:/mongot-community/config.default.yml:ro
+    ports:
+      - "8080:8080"
+      - "9946:9946"
+      - "27028:27028"
+    networks:
+      search-community:
+        aliases:
+          - mongot-community.search-community
+    command: ["--internalListAllIndexesForTesting=true"]
+
+# ── Shared resources ──────────────────────────────────────────────────────────
+volumes:
+  keyfile:
+  passwordfile:
+  mongodata:
+  mongotdata:
+
+networks:
+  search-community:
+    driver: bridge
