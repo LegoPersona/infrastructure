@@ -3,13 +3,13 @@ set -e
 
 MONGOSH="mongosh --host localhost:27017 --username admin --password admin --authenticationDatabase admin --quiet"
 
-echo "⏳ Waiting for mongod to accept connections..."
+echo "Waiting for mongod to accept connections..."
 until $MONGOSH --eval "db.adminCommand('ping').ok" > /dev/null 2>&1; do
-  echo "   ...not ready yet, retrying in 3s"
+  echo "  not ready yet, retrying in 3s"
   sleep 3
 done
 
-echo "✅ mongod is up. Initiating replica set if needed..."
+echo "mongod is up. Initiating replica set if needed..."
 $MONGOSH --eval "
   try {
     const s = rs.status();
@@ -36,4 +36,4 @@ $MONGOSH --eval "
   }
 "
 
-echo "🎉 RS init complete."
+echo "RS init complete."

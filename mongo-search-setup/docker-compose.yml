@@ -11,11 +11,11 @@ services:
         apk add --no-cache openssl &&
 
         openssl rand -base64 756 > /keyfile/keyfile &&
-        chown -R 101:101 /keyfile &&
+        chown -R 1000:1000 /keyfile &&
         chmod 400 /keyfile/keyfile &&
 
         printf 'mongot' > /passwordfile/passwordfile.clean &&
-        chown -R 101:101 /passwordfile &&
+        chown -R 1000:1000 /passwordfile &&
         chmod 600 /passwordfile/passwordfile.clean &&
 
         echo '✅  Keyfile + passwordfile ready'
