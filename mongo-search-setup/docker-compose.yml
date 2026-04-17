@@ -2,20 +2,19 @@ services:
 
   # ── Step 1: generate the keyfile + password file, fix ownership ──────────────
   keyfile-init:
-    image: alpine
+    image: mongodb/mongodb-community-server:latest
+    user: root
     volumes:
       - keyfile:/keyfile
       - passwordfile:/passwordfile
     command: >
-      sh -c "
-        apk add --no-cache openssl &&
-
+      bash -c "
         openssl rand -base64 756 > /keyfile/keyfile &&
-        chown -R 1000:1000 /keyfile &&
+        chown -R mongodb:mongodb /keyfile &&
         chmod 400 /keyfile/keyfile &&
 
         printf 'mongot' > /passwordfile/passwordfile.clean &&
-        chown -R 1000:1000 /passwordfile &&
+        chown -R mongodb:mongodb /passwordfile &&
         chmod 600 /passwordfile/passwordfile.clean &&
 
         echo '✅  Keyfile + passwordfile ready'
@@ -98,4 +97,5 @@ volumes:
 
 networks:
   search-community:
+    name: search-community
     driver: bridge

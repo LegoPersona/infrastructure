@@ -1,0 +1,50 @@
+services:
+
+  backendapi:
+    build:
+      context: ../backendAPI/backendAPI
+    container_name: backendapi
+    ports:
+      - "8001:8001"
+    environment:
+      PORT: "8001"
+      MONGO_URL: "mongodb://admin:admin@mongod:27017/legopersona?authSource=admin"
+    networks:
+      - search-community
+    restart: unless-stopped
+
+  facellm:
+    build:
+      context: ../faceLLM-service
+    container_name: facellm
+    ports:
+      - "8002:8002"
+    networks:
+      - search-community
+    restart: unless-stopped
+
+  embedding:
+    build:
+      context: ../text-embedding-service
+    container_name: embedding
+    ports:
+      - "8003:8003"
+    networks:
+      - search-community
+    restart: unless-stopped
+
+  legoservice:
+    build:
+      context: ../LegoService
+    container_name: legoservice
+    ports:
+      - "8004:8004"
+    environment:
+      PORT: "8004"
+    networks:
+      - search-community
+    restart: unless-stopped
+
+networks:
+  search-community:
+    external: true
