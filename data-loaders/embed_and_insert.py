@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+"""
+Generic MongoDB data loader with embeddings.
+
+This script:
+1. Scans a templates directory for .ldr files organized by category
+2. Fetches embeddings from an embedding service for each description
+3. Generates MongoDB insert commands with embedded vectors
+4. Each category becomes a separate MongoDB collection
+
+Usage:
+    python3 embed_and_insert.py --templates-dir /path/to/templates \\
+                                --embedding-url http://localhost:8003/embed \\
+                                --output insert_commands.js
+"""
+
+import argparse
+import json
+from pathlib import Path
+from typing import List, Dict
+import requests
+import sys
+
+
+def filename_to_desc(filename: str) -> str:
+    """Convert filename to human-readable description.
+
+    Example: black_french_beard.ldr -> Black French Beard
+    """
+    name = filename.replace(".ldr", "")
+    return " ".join(word.capitalize() for word in name.split("_"))
+
+
+def get_embedding(text: str, embedding_url: str) -> List[float]:
+    """Fetch embedding from the embedding service.
+
+    Args:
+        text: The text to embed
+        embedding_url: Base URL of the embedding service (e.g., http://localhost:8003/embed)
+
+    Returns:
+        List of floats representing the embedding vector
+
+    Raises:
+        requests.RequestException: If the embedding service is unavailable or errors
+    """
+    try:
+        response = requests.post(embedding_url, json={"text": text}, timeout=30)
+        response.raise_for_status()
+        return response.json()["embedding"]
+    except requests.exceptions.ConnectionError:
+        raise requests.RequestException(
+            f"Failed to connect to embedding service at {embedding_url}\n"
+            f"Make sure the embedding service is running on port 8003."
+        )
+    except requests.exceptions.Timeout:
+        raise requests.RequestException(
+            f"Embedding service request timed out. Service may be slow or unresponsive."
+        )
+
+
+def generate_insert_commands(
+    templates_dir: Path,
+    embedding_url: str,
+    output_file: Path = None,
+    verbose: bool = False
+) -> str:
+    """Generate MongoDB insert commands for all templates with embeddings.
+
+    Args:
+        templates_dir: Path to templates directory containing category subdirectories
+        embedding_url: URL of the embedding service endpoint
+        output_file: Optional file path to save the output
+        verbose: Print progress to stderr
+
+    Returns:
+        String containing MongoDB insert commands
+    """
+    templates_dir = Path(templates_dir)
+
+    if not templates_dir.exists():
+        raise FileNotFoundError(f"Templates directory not found: {templates_dir}")
+
+    output_lines = []
+
+    # Iterate through each category directory
+    for category_dir in sorted(templates_dir.iterdir()):
+        if not category_dir.is_dir():
+            continue
+
+        category_name = category_dir.name
+        ldr_files = sorted(category_dir.glob("*.ldr"))
+
+        if not ldr_files:
+            continue
+
+        if verbose:
+            print(f"Processing category: {category_name} ({len(ldr_files)} items)", file=sys.stderr)
+
+        output_lines.append(f"\n// ===== {category_name.upper()} =====")
+        output_lines.append(f"// MongoDB Collection: {category_name}")
+        output_lines.append(f"// Insert commands:\n")
+
+        documents = []
+        for ldr_file in ldr_files:
+            filename = ldr_file.name
+            description = filename_to_desc(filename)
+
+            # Fetch embedding from service
+            if verbose:
+                print(f"  Embedding '{description}'...", file=sys.stderr, flush=True)
+
+            embedding = get_embedding(description, embedding_url)
+
+            doc = {
+                "module_name": filename,
+                "desc": description,
+                "embedding": embedding
+            }
+            documents.append(doc)
+
+        # Build insertMany command
+        output_lines.append(f'db.{category_name}.insertMany([')
+        for i, doc in enumerate(documents):
+            json_str = json.dumps(doc, indent=2)
+            comma = "," if i < len(documents) - 1 else ""
+            indented = "\n".join("  " + line for line in json_str.split("\n"))
+            output_lines.append(f'{indented}{comma}')
+        output_lines.append('])\n')
+
+    output = "\n".join(output_lines)
+
+    if output_file:
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, "w") as f:
+            f.write(output)
+        if verbose:
+            print(f"Output saved to: {output_file}", file=sys.stderr)
+
+    return output
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Generate MongoDB insert commands with embeddings for LEGO templates",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic usage with defaults
+  python3 embed_and_insert.py ../lego-service/templates
+
+  # Specify output file
+  python3 embed_and_insert.py ../lego-service/templates -o insert_commands.js
+
+  # Custom embedding service URL
+  python3 embed_and_insert.py ../lego-service/templates \\
+      --embedding-url http://localhost:8003/embed
+
+  # Verbose output
+  python3 embed_and_insert.py ../lego-service/templates -v
+        """
+    )
+
+    parser.add_argument(
+        "templates_dir",
+        type=str,
+        help="Path to templates directory containing category subdirectories with .ldr files"
+    )
+
+    parser.add_argument(
+        "-o", "--output",
+        type=str,
+        default=None,
+        help="Output file path for MongoDB commands (default: print to stdout)"
+    )
+
+    parser.add_argument(
+        "--embedding-url",
+        type=str,
+        default="http://localhost:8003/embed",
+        help="URL of the embedding service endpoint (default: http://localhost:8003/embed)"
+    )
+
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Print progress information to stderr"
+    )
+
+    args = parser.parse_args()
+
+    try:
+        output = generate_insert_commands(
+            templates_dir=args.templates_dir,
+            embedding_url=args.embedding_url,
+            output_file=Path(args.output) if args.output else None,
+            verbose=args.verbose
+        )
+
+        if not args.output:
+            print(output)
+
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except requests.RequestException as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
