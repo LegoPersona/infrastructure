@@ -5,7 +5,7 @@
 
 db.beard.insertMany([
   {
-    "module_name": "black_french_beard.ldr",
+    "moduleName": "black_french_beard.ldr",
     "desc": "Black French Beard",
     "embedding": [
       -0.04706988483667374,
@@ -395,7 +395,7 @@ db.beard.insertMany([
     ]
   },
   {
-    "module_name": "black_full_beard.ldr",
+    "moduleName": "black_full_beard.ldr",
     "desc": "Black Full Beard",
     "embedding": [
       -0.03255276754498482,
@@ -785,7 +785,7 @@ db.beard.insertMany([
     ]
   },
   {
-    "module_name": "brown_french_beard.ldr",
+    "moduleName": "brown_french_beard.ldr",
     "desc": "Brown French Beard",
     "embedding": [
       0.004760682582855225,
@@ -1175,7 +1175,7 @@ db.beard.insertMany([
     ]
   },
   {
-    "module_name": "brown_full_beard.ldr",
+    "moduleName": "brown_full_beard.ldr",
     "desc": "Brown Full Beard",
     "embedding": [
       0.013107992708683014,
@@ -1565,7 +1565,7 @@ db.beard.insertMany([
     ]
   },
   {
-    "module_name": "no_beard.ldr",
+    "moduleName": "no_beard.ldr",
     "desc": "No Beard",
     "embedding": [
       0.03226463869214058,
@@ -1955,7 +1955,7 @@ db.beard.insertMany([
     ]
   },
   {
-    "module_name": "redhead_french_beard.ldr",
+    "moduleName": "redhead_french_beard.ldr",
     "desc": "Redhead French Beard",
     "embedding": [
       -0.012635253369808197,
@@ -2345,7 +2345,7 @@ db.beard.insertMany([
     ]
   },
   {
-    "module_name": "redhead_full_beard.ldr",
+    "moduleName": "redhead_full_beard.ldr",
     "desc": "Redhead Full Beard",
     "embedding": [
       0.000667849148157984,
@@ -2735,7 +2735,7 @@ db.beard.insertMany([
     ]
   },
   {
-    "module_name": "yellow_french_beard.ldr",
+    "moduleName": "yellow_french_beard.ldr",
     "desc": "Yellow French Beard",
     "embedding": [
       -0.018905440345406532,
@@ -3125,7 +3125,7 @@ db.beard.insertMany([
     ]
   },
   {
-    "module_name": "yellow_full_beard.ldr",
+    "moduleName": "yellow_full_beard.ldr",
     "desc": "Yellow Full Beard",
     "embedding": [
       -0.009650924243032932,
@@ -3523,7 +3523,7 @@ db.beard.insertMany([
 
 db.eyebrows.insertMany([
   {
-    "module_name": "black_round_eyebrows.ldr",
+    "moduleName": "black_round_eyebrows.ldr",
     "desc": "Black Round Eyebrows",
     "embedding": [
       -0.06662855297327042,
@@ -3913,7 +3913,7 @@ db.eyebrows.insertMany([
     ]
   },
   {
-    "module_name": "black_straight_eyebrows.ldr",
+    "moduleName": "black_straight_eyebrows.ldr",
     "desc": "Black Straight Eyebrows",
     "embedding": [
       -0.09414370357990265,
@@ -4303,7 +4303,7 @@ db.eyebrows.insertMany([
     ]
   },
   {
-    "module_name": "brown_round_eyebrows.ldr",
+    "moduleName": "brown_round_eyebrows.ldr",
     "desc": "Brown Round Eyebrows",
     "embedding": [
       -0.027423497289419174,
@@ -4693,7 +4693,7 @@ db.eyebrows.insertMany([
     ]
   },
   {
-    "module_name": "brown_straight_eyebrows.ldr",
+    "moduleName": "brown_straight_eyebrows.ldr",
     "desc": "Brown Straight Eyebrows",
     "embedding": [
       -0.05274244397878647,
@@ -5083,7 +5083,7 @@ db.eyebrows.insertMany([
     ]
   },
   {
-    "module_name": "gray_round_eyebrows.ldr",
+    "moduleName": "gray_round_eyebrows.ldr",
     "desc": "Gray Round Eyebrows",
     "embedding": [
       -0.03887825831770897,
@@ -5473,7 +5473,7 @@ db.eyebrows.insertMany([
     ]
   },
   {
-    "module_name": "gray_straight_eyebrows.ldr",
+    "moduleName": "gray_straight_eyebrows.ldr",
     "desc": "Gray Straight Eyebrows",
     "embedding": [
       -0.06787732988595963,
@@ -5863,7 +5863,7 @@ db.eyebrows.insertMany([
     ]
   },
   {
-    "module_name": "yellow_round_eyebrows.ldr",
+    "moduleName": "yellow_round_eyebrows.ldr",
     "desc": "Yellow Round Eyebrows",
     "embedding": [
       -0.0427493192255497,
@@ -6253,7 +6253,7 @@ db.eyebrows.insertMany([
     ]
   },
   {
-    "module_name": "yellow_straight_eyebrows.ldr",
+    "moduleName": "yellow_straight_eyebrows.ldr",
     "desc": "Yellow Straight Eyebrows",
     "embedding": [
       -0.06690075993537903,
@@ -6651,7 +6651,7 @@ db.eyebrows.insertMany([
 
 db.eyes.insertMany([
   {
-    "module_name": "black_eyes.ldr",
+    "moduleName": "black_eyes.ldr",
     "desc": "Black Eyes",
     "embedding": [
       -0.043519292026758194,
@@ -7041,7 +7041,7 @@ db.eyes.insertMany([
     ]
   },
   {
-    "module_name": "blue_eyes.ldr",
+    "moduleName": "blue_eyes.ldr",
     "desc": "Blue Eyes",
     "embedding": [
       -0.05804886296391487,
@@ -7431,7 +7431,7 @@ db.eyes.insertMany([
     ]
   },
   {
-    "module_name": "brown_eyes.ldr",
+    "moduleName": "brown_eyes.ldr",
     "desc": "Brown Eyes",
     "embedding": [
       0.01585453934967518,
@@ -7821,7 +7821,7 @@ db.eyes.insertMany([
     ]
   },
   {
-    "module_name": "green_eyes.ldr",
+    "moduleName": "green_eyes.ldr",
     "desc": "Green Eyes",
     "embedding": [
       -0.03057028353214264,
@@ -8219,7 +8219,7 @@ db.eyes.insertMany([
 
 db.hair.insertMany([
   {
-    "module_name": "bald_hair.ldr",
+    "moduleName": "bald_hair.ldr",
     "desc": "Bald Hair",
     "embedding": [
       -0.030092483386397362,
@@ -8609,7 +8609,7 @@ db.hair.insertMany([
     ]
   },
   {
-    "module_name": "black_afro_hair.ldr",
+    "moduleName": "black_afro_hair.ldr",
     "desc": "Black Afro Hair",
     "embedding": [
       -0.06722746044397354,
@@ -8999,7 +8999,7 @@ db.hair.insertMany([
     ]
   },
   {
-    "module_name": "black_medium_curly_hair.ldr",
+    "moduleName": "black_medium_curly_hair.ldr",
     "desc": "Black Medium Curly Hair",
     "embedding": [
       -0.03035319410264492,
@@ -9389,7 +9389,7 @@ db.hair.insertMany([
     ]
   },
   {
-    "module_name": "black_short_crew_cut_hair.ldr",
+    "moduleName": "black_short_crew_cut_hair.ldr",
     "desc": "Black Short Crew Cut Hair",
     "embedding": [
       -0.03635140508413315,
@@ -9779,7 +9779,7 @@ db.hair.insertMany([
     ]
   },
   {
-    "module_name": "brown_afro_hair.ldr",
+    "moduleName": "brown_afro_hair.ldr",
     "desc": "Brown Afro Hair",
     "embedding": [
       -0.01528723444789648,
@@ -10169,7 +10169,7 @@ db.hair.insertMany([
     ]
   },
   {
-    "module_name": "brown_medium_curly_hair.ldr",
+    "moduleName": "brown_medium_curly_hair.ldr",
     "desc": "Brown Medium Curly Hair",
     "embedding": [
       0.00957917794585228,
@@ -10559,7 +10559,7 @@ db.hair.insertMany([
     ]
   },
   {
-    "module_name": "brown_short_crew_cut_hair.ldr",
+    "moduleName": "brown_short_crew_cut_hair.ldr",
     "desc": "Brown Short Crew Cut Hair",
     "embedding": [
       0.003404491115361452,
@@ -10949,7 +10949,7 @@ db.hair.insertMany([
     ]
   },
   {
-    "module_name": "yellow_medium_curly_hair.ldr",
+    "moduleName": "yellow_medium_curly_hair.ldr",
     "desc": "Yellow Medium Curly Hair",
     "embedding": [
       -0.02983693778514862,
@@ -11339,7 +11339,7 @@ db.hair.insertMany([
     ]
   },
   {
-    "module_name": "yellow_short_crew_cut_hair.ldr",
+    "moduleName": "yellow_short_crew_cut_hair.ldr",
     "desc": "Yellow Short Crew Cut Hair",
     "embedding": [
       -0.03482456132769585,
@@ -11737,7 +11737,7 @@ db.hair.insertMany([
 
 db.nose.insertMany([
   {
-    "module_name": "long_nose.ldr",
+    "moduleName": "long_nose.ldr",
     "desc": "Long Nose",
     "embedding": [
       0.04461515322327614,
@@ -12127,7 +12127,7 @@ db.nose.insertMany([
     ]
   },
   {
-    "module_name": "pointy_nose.ldr",
+    "moduleName": "pointy_nose.ldr",
     "desc": "Pointy Nose",
     "embedding": [
       0.004362719599157572,
@@ -12517,7 +12517,7 @@ db.nose.insertMany([
     ]
   },
   {
-    "module_name": "round_nose.ldr",
+    "moduleName": "round_nose.ldr",
     "desc": "Round Nose",
     "embedding": [
       0.036886539310216904,
@@ -12915,7 +12915,7 @@ db.nose.insertMany([
 
 db.pants.insertMany([
   {
-    "module_name": "black_pants.ldr",
+    "moduleName": "black_pants.ldr",
     "desc": "Black Pants",
     "embedding": [
       -0.08869771659374237,
@@ -13305,7 +13305,7 @@ db.pants.insertMany([
     ]
   },
   {
-    "module_name": "blue_pants.ldr",
+    "moduleName": "blue_pants.ldr",
     "desc": "Blue Pants",
     "embedding": [
       -0.10404802113771439,
@@ -13695,7 +13695,7 @@ db.pants.insertMany([
     ]
   },
   {
-    "module_name": "green_pants.ldr",
+    "moduleName": "green_pants.ldr",
     "desc": "Green Pants",
     "embedding": [
       -0.08740732818841934,
@@ -14085,7 +14085,7 @@ db.pants.insertMany([
     ]
   },
   {
-    "module_name": "red_pants.ldr",
+    "moduleName": "red_pants.ldr",
     "desc": "Red Pants",
     "embedding": [
       -0.0800696611404419,
@@ -14483,7 +14483,7 @@ db.pants.insertMany([
 
 db.shirt.insertMany([
   {
-    "module_name": "black_shirt.ldr",
+    "moduleName": "black_shirt.ldr",
     "desc": "Black Shirt",
     "embedding": [
       -0.07765211910009384,
@@ -14873,7 +14873,7 @@ db.shirt.insertMany([
     ]
   },
   {
-    "module_name": "blue_shirt.ldr",
+    "moduleName": "blue_shirt.ldr",
     "desc": "Blue Shirt",
     "embedding": [
       -0.08870987594127655,
@@ -15263,7 +15263,7 @@ db.shirt.insertMany([
     ]
   },
   {
-    "module_name": "green_shirt.ldr",
+    "moduleName": "green_shirt.ldr",
     "desc": "Green Shirt",
     "embedding": [
       -0.07057750970125198,
@@ -15653,7 +15653,7 @@ db.shirt.insertMany([
     ]
   },
   {
-    "module_name": "red_shirt.ldr",
+    "moduleName": "red_shirt.ldr",
     "desc": "Red Shirt",
     "embedding": [
       -0.05590462684631348,
