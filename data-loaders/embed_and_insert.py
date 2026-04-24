@@ -113,7 +113,7 @@ def generate_insert_commands(
             embedding = get_embedding(description, embedding_url)
 
             doc = {
-                "module_name": filename,
+                "moduleName": filename,
                 "desc": description,
                 "embedding": embedding
             }
