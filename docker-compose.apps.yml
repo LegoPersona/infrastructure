@@ -17,6 +17,9 @@ services:
     build:
       context: ../faceLLM-service
     container_name: facellm
+    environment:
+      LLM_PROVIDER: "huggingface"
+      HF_TOKEN: "YOUR TOKEN HERE"
     ports:
       - "8002:8002"
     networks:
@@ -35,7 +38,7 @@ services:
 
   legoservice:
     build:
-      context: ../LegoService
+      context: ../lego-service
     container_name: legoservice
     ports:
       - "8004:8004"
