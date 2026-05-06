@@ -114,6 +114,16 @@ db.eyes.insertMany([
 ])
 ```
 
+## Creating Vector Search Indexes
+
+Run once after data is loaded to enable `$vectorSearch` on each attribute collection:
+
+```powershell
+Get-Content create_vector_indexes.js | docker exec -i mongod mongosh -u admin -p admin --authenticationDatabase admin legopersona
+```
+
+---
+
 ## Inserting into MongoDB
 
 ### Option 1: Via MongoDB Shell (mongosh)

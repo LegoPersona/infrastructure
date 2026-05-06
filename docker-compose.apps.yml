@@ -17,9 +17,9 @@ services:
     build:
       context: ../faceLLM-service
     container_name: facellm
-    environment:
-      LLM_PROVIDER: "huggingface"
-      HF_TOKEN: "YOUR TOKEN HERE"
+    #environment:
+    #  LLM_PROVIDER: "huggingface"
+    #  HF_TOKEN: "YOUR TOKEN HERE"
     ports:
       - "8002:8002"
     networks:

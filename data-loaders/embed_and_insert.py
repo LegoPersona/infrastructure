@@ -31,23 +31,12 @@ def filename_to_desc(filename: str) -> str:
     return " ".join(word.capitalize() for word in name.split("_"))
 
 
-def get_embedding(text: str, embedding_url: str) -> List[float]:
-    """Fetch embedding from the embedding service.
-
-    Args:
-        text: The text to embed
-        embedding_url: Base URL of the embedding service (e.g., http://localhost:8003/embed)
-
-    Returns:
-        List of floats representing the embedding vector
-
-    Raises:
-        requests.RequestException: If the embedding service is unavailable or errors
-    """
+def get_embeddings(texts: List[str], embedding_url: str) -> List[List[float]]:
+    """Fetch embeddings for multiple texts from the embedding service."""
     try:
-        response = requests.post(embedding_url, json={"text": text}, timeout=30)
+        response = requests.post(embedding_url, json={"texts": texts}, timeout=30)
         response.raise_for_status()
-        return response.json()["embedding"]
+        return response.json()["embeddings"]
     except requests.exceptions.ConnectionError:
         raise requests.RequestException(
             f"Failed to connect to embedding service at {embedding_url}\n"
@@ -101,23 +90,18 @@ def generate_insert_commands(
         output_lines.append(f"// MongoDB Collection: {category_name}")
         output_lines.append(f"// Insert commands:\n")
 
-        documents = []
-        for ldr_file in ldr_files:
-            filename = ldr_file.name
-            description = filename_to_desc(filename)
+        filenames = [f.name for f in ldr_files]
+        descriptions = [filename_to_desc(f) for f in filenames]
 
-            # Fetch embedding from service
-            if verbose:
-                print(f"  Embedding '{description}'...", file=sys.stderr, flush=True)
+        if verbose:
+            print(f"  Embedding {len(descriptions)} descriptions...", file=sys.stderr, flush=True)
 
-            embedding = get_embedding(description, embedding_url)
+        embeddings = get_embeddings(descriptions, embedding_url)
 
-            doc = {
-                "moduleName": filename,
-                "desc": description,
-                "embedding": embedding
-            }
-            documents.append(doc)
+        documents = [
+            {"moduleName": filename, "desc": desc, "embedding": embedding}
+            for filename, desc, embedding in zip(filenames, descriptions, embeddings)
+        ]
 
         # Build insertMany command
         output_lines.append(f'db.{category_name}.insertMany([')
