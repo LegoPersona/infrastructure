@@ -32,6 +32,9 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["GLOG_minloglevel"] = "3"
 import argparse
+import email
+import json
+import requests
 import warnings
 import logging
 logging.getLogger("tensorflow").setLevel(logging.ERROR)
@@ -205,6 +208,62 @@ def collect_pairs(root, prefix):
     return pairs
 
 
+# --- Generate ---------------------------------------------------------------
+
+def generate_lego_images(folder: str, api_url: str) -> None:
+    root = Path(folder)
+    test_dirs = [d for d in sorted(root.iterdir()) if d.is_dir() and not d.name.startswith("_ref")]
+
+    if not test_dirs:
+        print("[generate] No test folders found.")
+        return
+
+    for person_dir in test_dirs:
+        original = person_dir / "original.jpg"
+        if not original.exists():
+            original = person_dir / "original.png"
+        if not original.exists():
+            print(f"[generate] {person_dir.name} — no original image found, skipping")
+            continue
+
+        try:
+            mime_type = "image/jpeg" if original.suffix.lower() == ".jpg" else "image/png"
+            with open(original, "rb") as f:
+                create_resp = requests.post(
+                    f"{api_url}/api/v1/personas",
+                    files={"image": (original.name, f, mime_type)},
+                    timeout=120,
+                )
+            create_resp.raise_for_status()
+
+            content_type = create_resp.headers.get("Content-Type", "")
+            raw = b"Content-Type: " + content_type.encode() + b"\r\n\r\n" + create_resp.content
+            msg = email.message_from_bytes(raw)
+            persona_id = None
+            for part in msg.walk():
+                if part.get_content_type() == "application/json":
+                    data = json.loads(part.get_payload(decode=True))
+                    persona_id = data.get("id")
+                    break
+
+            if not persona_id:
+                print(f"[generate] {person_dir.name} — could not extract persona id, skipping")
+                continue
+
+            img_resp = requests.get(
+                f"{api_url}/api/v1/personas/{persona_id}/image",
+                timeout=120,
+            )
+            img_resp.raise_for_status()
+
+            lego_path = person_dir / "lego.png"
+            lego_path.write_bytes(img_resp.content)
+            print(f"[generate] {person_dir.name} → lego.png")
+
+        except Exception as exc:
+            print(f"[generate] {person_dir.name} — error: {exc}")
+
+
 # --- Main -------------------------------------------------------------------
 
 def run_benchmark(folder: str):
@@ -289,5 +348,18 @@ if __name__ == "__main__":
         default="./test_images",
         help="Path to test images folder (default: ./test_images)",
     )
+    parser.add_argument(
+        "--generate",
+        action="store_true",
+        help="Generate lego images via the backendAPI before benchmarking",
+    )
+    parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:3000",
+        help="Base URL for the backendAPI (default: http://localhost:3000)",
+    )
     args = parser.parse_args()
+    if args.generate:
+        generate_lego_images(args.folder, args.api_url)
     run_benchmark(args.folder)

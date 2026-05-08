@@ -6,3 +6,4 @@ tqdm
 deepface
 tf-keras
 git+https://github.com/openai/CLIP.git
+requests

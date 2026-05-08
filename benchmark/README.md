@@ -70,7 +70,7 @@ benchmark/
             lego.jpg
         person1/            ← test case
             original.jpg
-            lego.jpg
+            lego.jpg        ← generated automatically with --generate
         person2/
             original.jpg
             lego.jpg
@@ -103,6 +103,31 @@ Or with a custom folder:
 ```bash
 python benchmark.py --folder ./my_test_set
 ```
+
+---
+
+## Auto-generating Lego images
+
+If you only have `original.*` images and want to generate the lego images automatically using the live pipeline, use `--generate`:
+
+```bash
+python benchmark.py --generate --api-url http://localhost:8001
+```
+
+This will, for each non-`_ref` test folder:
+1. POST the original image to the backendAPI (`/api/v1/personas`)
+2. Fetch the rendered lego PNG (`/api/v1/personas/:id/image`)
+3. Save it as `lego.png` in that folder (always overwrites)
+
+Then run the benchmark as normal.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--generate` | off | Generate lego images before benchmarking |
+| `--api-url` | `http://localhost:8001` | Base URL for the backendAPI |
+| `--folder` | `./test_images` | Path to test images folder |
+
+Reference folders (`_ref_*`) are never regenerated — they are expected to already have their `lego.*` files.
 
 ---
 
