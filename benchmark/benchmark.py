@@ -1,14 +1,25 @@
 """
-Lego Model Benchmark — CLIP + Face + Color Similarity Score
-============================================================
-Measures how similar each Lego output is to its original photo,
-using a combination of:
-  - CLIP (semantic similarity)
-  - DeepFace (face identity)
-  - Color histogram (skin/hair color match)
+Lego Model Benchmark 2.0
+========================
+Scores how well a Lego figure represents the original person photo.
 
-Reference folders (prefixed with _ref) establish a baseline score.
-All other folders are scored relative to that baseline.
+Three components:
+  1. Attribute match (60%) — CLIP zero-shot classification of 7 appearance
+     features using domain-specific prompts: person prompts for the original
+     photo, Lego-specific prompts for the generated figure. Each feature is
+     scored with a dot-product over the probability distributions and weighted
+     by its visual importance in a Lego figure.
+
+  2. Visual similarity (20%) — CLIP ViT-L/14 cosine similarity, rescaled to
+     remove the random-pair floor (~0.30 for this model) so unrelated images
+     score near 0 instead of 0.5.
+
+  3. Color match (20%) — H and S channel Bhattacharyya coefficients averaged
+     independently so a saturation match alone cannot inflate the score.
+
+Attribute categories mirror the lego-service template options:
+  hair_color, hair_style, eye_color, eyebrow_color, eyebrow_shape,
+  facial_hair, nose_shape
 
 Folder structure expected:
     test_images/
@@ -18,30 +29,20 @@ Folder structure expected:
         person1/
             original.jpg
             lego.jpg
-        ...
 
 Usage:
     pip install -r requirements.txt
-    python benchmark.py --folder ./test_images
+    python benchmark.py [--folder ./test_images] [--verbose]
 """
 
-import os
-
-# Suppress TensorFlow / DeepFace console noise
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-os.environ["GLOG_minloglevel"] = "3"
 import argparse
 import email
 import json
-import requests
 import warnings
-import logging
-logging.getLogger("tensorflow").setLevel(logging.ERROR)
-logging.getLogger("tf_keras").setLevel(logging.ERROR)
 from pathlib import Path
 
 import clip
+import requests
 import torch
 import numpy as np
 from PIL import Image
@@ -49,224 +50,316 @@ from PIL import Image
 warnings.filterwarnings("ignore")
 
 
-# --- CLIP -------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# CLIP model
+# ---------------------------------------------------------------------------
+
+_CLIP_FLOOR = 0.30  # empirical cosine-similarity floor for ViT-L/14 on random pairs
 
 def load_clip_model():
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model, preprocess = clip.load("ViT-B/32", device=device)
+    model, preprocess = clip.load("ViT-L/14", device=device)
+    model.eval()
     return model, preprocess, device
 
 
-def get_clip_embedding(model, preprocess, device, image_path):
-    image = preprocess(Image.open(image_path).convert("RGB")).unsqueeze(0).to(device)
+def get_embedding(model, preprocess, device, image_path):
+    img = preprocess(Image.open(image_path).convert("RGB")).unsqueeze(0).to(device)
     with torch.no_grad():
-        embedding = model.encode_image(image)
-        embedding = embedding / embedding.norm(dim=-1, keepdim=True)
-    return embedding
+        emb = model.encode_image(img)
+        emb = emb / emb.norm(dim=-1, keepdim=True)
+    return emb
 
 
-def clip_similarity(model, preprocess, device, path_a, path_b):
-    emb_a = get_clip_embedding(model, preprocess, device, path_a)
-    emb_b = get_clip_embedding(model, preprocess, device, path_b)
-    return (emb_a * emb_b).sum().item()
+def visual_similarity(emb_a, emb_b):
+    raw = (emb_a * emb_b).sum().item()
+    return max(0.0, (raw - _CLIP_FLOOR) / (1.0 - _CLIP_FLOOR))
 
 
-# --- DeepFace ---------------------------------------------------------------
-
-def face_similarity(path_a, path_b):
-    try:
-        from deepface import DeepFace
-        result = DeepFace.verify(
-            img1_path=str(path_a),
-            img2_path=str(path_b),
-            model_name="Facenet",
-            detector_backend="skip",
-            enforce_detection=False,
-            silent=True,
-        )
-        return max(0.0, 1.0 - result["distance"])
-    except Exception:
-        return None
+def _clip_probs(model, device, image_emb, prompts):
+    tokens = clip.tokenize(prompts).to(device)
+    with torch.no_grad():
+        text_embs = model.encode_text(tokens)
+        text_embs = text_embs / text_embs.norm(dim=-1, keepdim=True)
+    logits = (image_emb @ text_embs.T).squeeze(0) * 100
+    return torch.softmax(logits, dim=0).cpu().numpy()
 
 
-# --- Color similarity -------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Attribute classification
+# Separate prompt sets for each domain so CLIP classifies each image in its
+# own visual language rather than forcing cross-domain text matching.
+# Options mirror the lego-service template categories exactly.
+# ---------------------------------------------------------------------------
 
-def get_color_histogram(image_path, bins=32):
-    """
-    Returns a normalized HSV color histogram for the image.
-    Using HSV because hue captures hair/skin color better than RGB.
-    We focus on the H and S channels and ignore V (brightness),
-    so lighting differences don't throw off the comparison.
-    """
+# How much each attribute contributes to the final attribute score.
+# Weights reflect visual prominence in a Lego figure.
+ATTR_WEIGHTS = {
+    "hair_color":    0.25,
+    "hair_style":    0.20,
+    "facial_hair":   0.20,
+    "eye_color":     0.15,
+    "eyebrow_color": 0.10,
+    "eyebrow_shape": 0.05,
+    "nose_shape":    0.05,
+}
+
+PERSON_PROMPTS = {
+    "hair_color": [
+        "a photo of a person with blonde or light hair",
+        "a photo of a person with brown hair",
+        "a photo of a person with black or dark hair",
+        "a photo of a person with red or auburn hair",
+        "a photo of a person with white or gray hair",
+    ],
+    "hair_style": [
+        "a photo of a person with an afro or very curly hair",
+        "a photo of a person with short cropped or crew cut hair",
+        "a photo of a person with long wavy hair",
+        "a photo of a person with medium length straight hair",
+        "a photo of a person with a short bob hairstyle",
+        "a photo of a person with short textured or messy hair",
+        "a photo of a bald person",
+    ],
+    "eye_color": [
+        "a photo of a person with black or very dark eyes",
+        "a photo of a person with blue eyes",
+        "a photo of a person with brown eyes",
+        "a photo of a person with green eyes",
+    ],
+    "eyebrow_color": [
+        "a photo of a person with black eyebrows",
+        "a photo of a person with blonde or light eyebrows",
+        "a photo of a person with brown eyebrows",
+        "a photo of a person with gray eyebrows",
+    ],
+    "eyebrow_shape": [
+        "a photo of a person with curved or arched eyebrows",
+        "a photo of a person with round eyebrows",
+        "a photo of a person with straight flat eyebrows",
+        "a photo of a person with thick bushy eyebrows",
+    ],
+    "facial_hair": [
+        "a photo of a person with a full beard",
+        "a photo of a person with a goatee",
+        "a photo of a person with no beard or facial hair",
+    ],
+    "nose_shape": [
+        "a photo of a person with a long narrow nose",
+        "a photo of a person with a pointed or sharp nose",
+        "a photo of a person with a round or button nose",
+    ],
+}
+
+LEGO_PROMPTS = {
+    "hair_color": [
+        "a lego minifigure with blonde or yellow hair",
+        "a lego minifigure with brown hair",
+        "a lego minifigure with black hair",
+        "a lego minifigure with red or orange hair",
+        "a lego minifigure with white or gray hair",
+    ],
+    "hair_style": [
+        "a lego minifigure with an afro hairstyle",
+        "a lego minifigure with short cropped hair",
+        "a lego minifigure with long wavy hair",
+        "a lego minifigure with medium length straight hair",
+        "a lego minifigure with a short bob hairstyle",
+        "a lego minifigure with short textured hair",
+        "a lego minifigure with no hair piece or bald head",
+    ],
+    "eye_color": [
+        "a lego minifigure with black or dark eyes",
+        "a lego minifigure with blue eyes",
+        "a lego minifigure with brown eyes",
+        "a lego minifigure with green eyes",
+    ],
+    "eyebrow_color": [
+        "a lego minifigure with black eyebrows",
+        "a lego minifigure with blonde or light eyebrows",
+        "a lego minifigure with brown eyebrows",
+        "a lego minifigure with gray eyebrows",
+    ],
+    "eyebrow_shape": [
+        "a lego minifigure with curved or arched eyebrows",
+        "a lego minifigure with round eyebrows",
+        "a lego minifigure with straight eyebrows",
+        "a lego minifigure with thick eyebrows",
+    ],
+    "facial_hair": [
+        "a lego minifigure with a full beard",
+        "a lego minifigure with a goatee",
+        "a lego minifigure with no beard",
+    ],
+    "nose_shape": [
+        "a lego minifigure with a long nose",
+        "a lego minifigure with a pointed nose",
+        "a lego minifigure with a round nose",
+    ],
+}
+
+
+def attribute_scores(model, device, orig_emb, lego_emb):
+    """Returns per-attribute dot-product scores (0–1 each)."""
+    scores = {}
+    for attr, weight in ATTR_WEIGHTS.items():
+        p_orig = _clip_probs(model, device, orig_emb, PERSON_PROMPTS[attr])
+        p_lego = _clip_probs(model, device, lego_emb, LEGO_PROMPTS[attr])
+        scores[attr] = float(np.dot(p_orig, p_lego))
+    return scores
+
+
+def weighted_attr_score(scores):
+    return sum(ATTR_WEIGHTS[attr] * s for attr, s in scores.items())
+
+
+# ---------------------------------------------------------------------------
+# Color similarity
+# ---------------------------------------------------------------------------
+
+def _hsv_histograms(image_path, bins=32):
     img = Image.open(image_path).convert("RGB")
-    # Resize for speed
     img = img.resize((128, 128))
-    img_hsv = img.convert("HSV") if hasattr(img, "convert") else img
-    # PIL doesn't support HSV natively — use numpy
     arr = np.array(img).astype(np.float32) / 255.0
-    # Convert RGB to HSV manually
-    r, g, b = arr[:,:,0], arr[:,:,1], arr[:,:,2]
+    r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
     maxc = np.max(arr, axis=2)
     minc = np.min(arr, axis=2)
-    v = maxc
     s = np.where(maxc != 0, (maxc - minc) / maxc, 0)
-    diff = maxc - minc
-    diff = np.where(diff == 0, 1, diff)  # avoid division by zero
+    diff = np.where(maxc - minc == 0, 1, maxc - minc)
     h = np.zeros_like(r)
-    mask = maxc == r
-    h[mask] = (60 * ((g[mask] - b[mask]) / diff[mask])) % 360
-    mask = maxc == g
-    h[mask] = 60 * ((b[mask] - r[mask]) / diff[mask]) + 120
-    mask = maxc == b
-    h[mask] = 60 * ((r[mask] - g[mask]) / diff[mask]) + 240
-    h = h / 360.0  # normalize to 0-1
-
-    # Build histogram on H and S (ignore V/brightness)
+    m = maxc == r; h[m] = (60 * ((g[m] - b[m]) / diff[m])) % 360
+    m = maxc == g; h[m] = 60 * ((b[m] - r[m]) / diff[m]) + 120
+    m = maxc == b; h[m] = 60 * ((r[m] - g[m]) / diff[m]) + 240
+    h /= 360.0
     h_hist, _ = np.histogram(h.flatten(), bins=bins, range=(0, 1))
     s_hist, _ = np.histogram(s.flatten(), bins=bins, range=(0, 1))
-
-    # Normalize
     h_hist = h_hist.astype(np.float32) / h_hist.sum()
     s_hist = s_hist.astype(np.float32) / s_hist.sum()
-
-    return np.concatenate([h_hist, s_hist])
+    return h_hist, s_hist
 
 
 def color_similarity(path_a, path_b):
     """
-    Compares color histograms using the Bhattacharyya coefficient,
-    which measures overlap between two distributions. Returns 0-1.
+    Bhattacharyya coefficient computed per channel (H and S) then averaged.
+    Each channel is independently bounded [0, 1] — a saturation match alone
+    cannot push the total to 1.0 when the hues are completely different.
     """
-    hist_a = get_color_histogram(path_a)
-    hist_b = get_color_histogram(path_b)
-    # Bhattacharyya coefficient
-    score = float(np.sum(np.sqrt(hist_a * hist_b)))
-    return min(1.0, score)
+    h_a, s_a = _hsv_histograms(path_a)
+    h_b, s_b = _hsv_histograms(path_b)
+    score_h = float(np.sum(np.sqrt(h_a * h_b)))
+    score_s = float(np.sum(np.sqrt(s_a * s_b)))
+    return (score_h + score_s) / 2
 
 
-# --- Combined scoring -------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Combined score
+# ---------------------------------------------------------------------------
 
-CLIP_WEIGHT  = 0.25
-FACE_WEIGHT  = 0.50
-COLOR_WEIGHT = 0.25
-
-
-def combined_score(clip_score, face_score, color_score):
-    if face_score is None:
-        # No face: split between CLIP and color
-        score = 0.5 * clip_score + 0.5 * color_score
-        return score, "CLIP+color"
-    score = CLIP_WEIGHT * clip_score + FACE_WEIGHT * face_score + COLOR_WEIGHT * color_score
-    return score, "combined"
+VISUAL_WEIGHT = 0.20
+ATTR_WEIGHT   = 0.60
+COLOR_WEIGHT  = 0.20
 
 
-# --- Helpers ----------------------------------------------------------------
+def combined_score(visual, attr, color):
+    return VISUAL_WEIGHT * visual + ATTR_WEIGHT * attr + COLOR_WEIGHT * color
 
-def score_pair(name, original_path, lego_path, clip_model, preprocess, device):
-    c_score = clip_similarity(clip_model, preprocess, device, original_path, lego_path)
-    f_score = face_similarity(original_path, lego_path)
-    col_score = color_similarity(original_path, lego_path)
-    final, mode = combined_score(c_score, f_score, col_score)
-    return c_score, f_score, col_score, final, mode
 
+# ---------------------------------------------------------------------------
+# Per-pair scoring
+# ---------------------------------------------------------------------------
+
+def score_pair(original_path, lego_path, model, preprocess, device):
+    orig_emb = get_embedding(model, preprocess, device, original_path)
+    lego_emb = get_embedding(model, preprocess, device, lego_path)
+
+    vis   = visual_similarity(orig_emb, lego_emb)
+    attrs = attribute_scores(model, device, orig_emb, lego_emb)
+    attr  = weighted_attr_score(attrs)
+    color = color_similarity(original_path, lego_path)
+    final = combined_score(vis, attr, color)
+    return vis, attr, attrs, color, final
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def relative_score(score, baseline):
-    if baseline == 0:
-        return 0.0
-    return min(1.0, score / baseline)
+    return 0.0 if baseline == 0 else min(1.0, score / baseline)
 
 
 def rating(pct):
-    if pct >= 0.90:
-        return "✅ Good"
-    elif pct >= 0.70:
-        return "⚠️  OK"
-    else:
-        return "❌ Poor"
+    if pct >= 0.90: return "✅ Good"
+    if pct >= 0.70: return "⚠️  OK"
+    return "❌ Poor"
 
 
 def collect_pairs(root, prefix):
     pairs = []
-    for person_dir in sorted(root.iterdir()):
-        if not person_dir.is_dir():
+    for d in sorted(root.iterdir()):
+        if not d.is_dir():
             continue
-        is_ref = person_dir.name.startswith("_ref")
-        if prefix == "ref" and not is_ref:
+        is_ref = d.name.startswith("_ref")
+        if prefix == "ref" and not is_ref: continue
+        if prefix == "test" and is_ref:    continue
+        orig = next((d / f for f in ("original.jpg", "original.png") if (d / f).exists()), None)
+        lego = next((d / f for f in ("lego.jpg", "lego.png")         if (d / f).exists()), None)
+        if not orig or not lego:
+            print(f"  [skip] {d.name} — missing original or lego image")
             continue
-        if prefix == "test" and is_ref:
-            continue
-        original = person_dir / "original.jpg"
-        lego = person_dir / "lego.jpg"
-        if not original.exists():
-            original = person_dir / "original.png"
-        if not lego.exists():
-            lego = person_dir / "lego.png"
-        if not original.exists() or not lego.exists():
-            print(f"  [skip] {person_dir.name} — missing original or lego image")
-            continue
-        pairs.append((person_dir.name, original, lego))
+        pairs.append((d.name, orig, lego))
     return pairs
 
 
-# --- Generate ---------------------------------------------------------------
+def print_attr_breakdown(attrs):
+    parts = "  ".join(f"{k}: {v:.2f}" for k, v in attrs.items())
+    print(f"    {parts}")
 
-def generate_lego_images(folder: str, api_url: str) -> None:
+
+# ---------------------------------------------------------------------------
+# Generate
+# ---------------------------------------------------------------------------
+
+def generate_lego_images(folder, api_url):
     root = Path(folder)
     test_dirs = [d for d in sorted(root.iterdir()) if d.is_dir() and not d.name.startswith("_ref")]
-
     if not test_dirs:
         print("[generate] No test folders found.")
         return
-
     for person_dir in test_dirs:
-        original = person_dir / "original.jpg"
-        if not original.exists():
-            original = person_dir / "original.png"
-        if not original.exists():
+        orig = next((person_dir / f for f in ("original.jpg", "original.png") if (person_dir / f).exists()), None)
+        if not orig:
             print(f"[generate] {person_dir.name} — no original image found, skipping")
             continue
-
         try:
-            mime_type = "image/jpeg" if original.suffix.lower() == ".jpg" else "image/png"
-            with open(original, "rb") as f:
-                create_resp = requests.post(
-                    f"{api_url}/api/v1/personas",
-                    files={"image": (original.name, f, mime_type)},
-                    timeout=120,
-                )
-            create_resp.raise_for_status()
-
-            content_type = create_resp.headers.get("Content-Type", "")
-            raw = b"Content-Type: " + content_type.encode() + b"\r\n\r\n" + create_resp.content
-            msg = email.message_from_bytes(raw)
-            persona_id = None
+            mime = "image/jpeg" if orig.suffix.lower() == ".jpg" else "image/png"
+            with open(orig, "rb") as f:
+                resp = requests.post(f"{api_url}/api/v1/personas",
+                                     files={"image": (orig.name, f, mime)}, timeout=120)
+            resp.raise_for_status()
+            ct  = resp.headers.get("Content-Type", "")
+            msg = email.message_from_bytes(b"Content-Type: " + ct.encode() + b"\r\n\r\n" + resp.content)
+            pid = None
             for part in msg.walk():
                 if part.get_content_type() == "application/json":
-                    data = json.loads(part.get_payload(decode=True))
-                    persona_id = data.get("id")
+                    pid = json.loads(part.get_payload(decode=True)).get("id")
                     break
-
-            if not persona_id:
+            if not pid:
                 print(f"[generate] {person_dir.name} — could not extract persona id, skipping")
                 continue
-
-            img_resp = requests.get(
-                f"{api_url}/api/v1/personas/{persona_id}/image",
-                timeout=120,
-            )
+            img_resp = requests.get(f"{api_url}/api/v1/personas/{pid}/image", timeout=120)
             img_resp.raise_for_status()
-
-            lego_path = person_dir / "lego.png"
-            lego_path.write_bytes(img_resp.content)
+            (person_dir / "lego.png").write_bytes(img_resp.content)
             print(f"[generate] {person_dir.name} → lego.png")
-
         except Exception as exc:
             print(f"[generate] {person_dir.name} — error: {exc}")
 
 
-# --- Main -------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
-def run_benchmark(folder: str):
+def run_benchmark(folder, verbose=False):
     root = Path(folder)
     ref_pairs  = collect_pairs(root, "ref")
     test_pairs = collect_pairs(root, "test")
@@ -278,16 +371,12 @@ def run_benchmark(folder: str):
         print("No test pairs found.")
         return
 
-    print("Loading CLIP model...")
-    clip_model, preprocess, device = load_clip_model()
-    print(f"Running on: {device}")
-    print("Loading DeepFace...\n")
+    print("Loading CLIP model (ViT-L/14)...")
+    model, preprocess, device = load_clip_model()
+    print(f"Running on: {device}\n")
 
-    col_n  = 22
-    header = (
-        f"{'Name':<{col_n}} {'CLIP':>7} {'Face':>7} {'Color':>7} "
-        f"{'Score':>7} {'Relative':>9}  Rating"
-    )
+    col_n   = 22
+    header  = f"{'Name':<{col_n}} {'Visual':>7} {'Attr':>7} {'Color':>7} {'Score':>7} {'Relative':>9}  Rating"
     divider = "-" * (len(header) + 2)
 
     # --- References ---
@@ -297,13 +386,11 @@ def run_benchmark(folder: str):
 
     ref_scores = []
     for name, orig, lego in ref_pairs:
-        c, f, col, final, mode = score_pair(name, orig, lego, clip_model, preprocess, device)
+        vis, attr, attrs, color, final = score_pair(orig, lego, model, preprocess, device)
         ref_scores.append(final)
-        face_str = f"{f:.4f}" if f is not None else "  n/a "
-        print(
-            f"{name:<{col_n}} {c:>7.4f} {face_str:>7} {col:>7.4f} "
-            f"{final:>7.4f} {'(baseline)':>9}  ({mode})"
-        )
+        print(f"{name:<{col_n}} {vis:>7.4f} {attr:>7.4f} {color:>7.4f} {final:>7.4f} {'(baseline)':>9}")
+        if verbose:
+            print_attr_breakdown(attrs)
 
     baseline = sum(ref_scores) / len(ref_scores)
     print(divider)
@@ -316,50 +403,32 @@ def run_benchmark(folder: str):
 
     relatives = []
     for name, orig, lego in test_pairs:
-        c, f, col, final, mode = score_pair(name, orig, lego, clip_model, preprocess, device)
+        vis, attr, attrs, color, final = score_pair(orig, lego, model, preprocess, device)
         rel = relative_score(final, baseline)
         relatives.append(rel)
-        face_str = f"{f:.4f}" if f is not None else "  n/a "
-        print(
-            f"{name:<{col_n}} {c:>7.4f} {face_str:>7} {col:>7.4f} "
-            f"{final:>7.4f} {rel:>9.1%}  {rating(rel)}  ({mode})"
-        )
+        print(f"{name:<{col_n}} {vis:>7.4f} {attr:>7.4f} {color:>7.4f} {final:>7.4f} {rel:>9.1%}  {rating(rel)}")
+        if verbose:
+            print_attr_breakdown(attrs)
 
     print(divider)
     avg_rel = sum(relatives) / len(relatives)
     print(f"\nTotal test pairs:  {len(test_pairs)}")
     print(f"Baseline score:    {baseline:.4f}")
     print(f"Average relative:  {avg_rel:.1%}")
-    print(f"Weights: CLIP {int(CLIP_WEIGHT*100)}% / Face {int(FACE_WEIGHT*100)}% / Color {int(COLOR_WEIGHT*100)}%")
+    print(f"Weights: Visual {int(VISUAL_WEIGHT*100)}% / Attr {int(ATTR_WEIGHT*100)}% / Color {int(COLOR_WEIGHT*100)}%")
 
-    if avg_rel >= 0.90:
-        print("\n🟢 Pipeline result: STRONG")
-    elif avg_rel >= 0.70:
-        print("\n🟡 Pipeline result: ACCEPTABLE")
-    else:
-        print("\n🔴 Pipeline result: NEEDS IMPROVEMENT")
+    if avg_rel >= 0.90:   print("\n🟢 Pipeline result: STRONG")
+    elif avg_rel >= 0.70: print("\n🟡 Pipeline result: ACCEPTABLE")
+    else:                 print("\n🔴 Pipeline result: NEEDS IMPROVEMENT")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Lego model benchmark")
-    parser.add_argument(
-        "--folder",
-        type=str,
-        default="./test_images",
-        help="Path to test images folder (default: ./test_images)",
-    )
-    parser.add_argument(
-        "--generate",
-        action="store_true",
-        help="Generate lego images via the backendAPI before benchmarking",
-    )
-    parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:3000",
-        help="Base URL for the backendAPI (default: http://localhost:3000)",
-    )
+    parser = argparse.ArgumentParser(description="Lego persona benchmark 2.0")
+    parser.add_argument("--folder",   default="./test_images",    help="Path to test images folder")
+    parser.add_argument("--generate", action="store_true",         help="Generate lego images via the API before benchmarking")
+    parser.add_argument("--api-url",  default="http://localhost:3000", help="Backend API base URL")
+    parser.add_argument("--verbose",  action="store_true",         help="Print per-attribute score breakdown for each pair")
     args = parser.parse_args()
     if args.generate:
         generate_lego_images(args.folder, args.api_url)
-    run_benchmark(args.folder)
+    run_benchmark(args.folder, verbose=args.verbose)
