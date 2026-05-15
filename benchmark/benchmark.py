@@ -320,12 +320,16 @@ def print_attr_breakdown(attrs):
 # Generate
 # ---------------------------------------------------------------------------
 
-def generate_lego_images(folder, api_url):
+def generate_lego_images(folder, api_url, token=None):
     root = Path(folder)
     test_dirs = [d for d in sorted(root.iterdir()) if d.is_dir() and not d.name.startswith("_ref")]
     if not test_dirs:
         print("[generate] No test folders found.")
         return
+
+    total_input = total_output = total_tokens = 0
+    token_counts = []
+
     for person_dir in test_dirs:
         orig = next((person_dir / f for f in ("original.jpg", "original.png") if (person_dir / f).exists()), None)
         if not orig:
@@ -333,26 +337,45 @@ def generate_lego_images(folder, api_url):
             continue
         try:
             mime = "image/jpeg" if orig.suffix.lower() == ".jpg" else "image/png"
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
             with open(orig, "rb") as f:
                 resp = requests.post(f"{api_url}/api/v1/personas",
-                                     files={"image": (orig.name, f, mime)}, timeout=120)
+                                     files={"image": (orig.name, f, mime)},
+                                     headers=headers, timeout=120)
             resp.raise_for_status()
             ct  = resp.headers.get("Content-Type", "")
             msg = email.message_from_bytes(b"Content-Type: " + ct.encode() + b"\r\n\r\n" + resp.content)
             pid = None
+            tokens_used = None
             for part in msg.walk():
                 if part.get_content_type() == "application/json":
-                    pid = json.loads(part.get_payload(decode=True)).get("id")
+                    data = json.loads(part.get_payload(decode=True))
+                    pid = data.get("id")
+                    tokens_used = data.get("tokens_used")
                     break
             if not pid:
                 print(f"[generate] {person_dir.name} — could not extract persona id, skipping")
                 continue
-            img_resp = requests.get(f"{api_url}/api/v1/personas/{pid}/image", timeout=120)
+            img_resp = requests.get(f"{api_url}/api/v1/personas/{pid}/image", headers=headers, timeout=120)
             img_resp.raise_for_status()
             (person_dir / "lego.png").write_bytes(img_resp.content)
-            print(f"[generate] {person_dir.name} → lego.png")
+            if tokens_used:
+                inp, out, tot = tokens_used.get("input", 0), tokens_used.get("output", 0), tokens_used.get("total", 0)
+                total_input   += inp
+                total_output  += out
+                total_tokens  += tot
+                token_counts.append(tot)
+                print(f"[generate] {person_dir.name} → lego.png  (tokens: {inp} in / {out} out / {tot} total)")
+            else:
+                print(f"[generate] {person_dir.name} → lego.png")
         except Exception as exc:
             print(f"[generate] {person_dir.name} — error: {exc}")
+
+    if token_counts:
+        n = len(token_counts)
+        print(f"\n[generate] Token usage across {n} generation(s):")
+        print(f"  Total  — input: {total_input}  output: {total_output}  total: {total_tokens}")
+        print(f"  Avg    — input: {total_input/n:.1f}  output: {total_output/n:.1f}  total: {total_tokens/n:.1f}")
 
 
 # ---------------------------------------------------------------------------
@@ -427,8 +450,9 @@ if __name__ == "__main__":
     parser.add_argument("--folder",   default="./test_images",    help="Path to test images folder")
     parser.add_argument("--generate", action="store_true",         help="Generate lego images via the API before benchmarking")
     parser.add_argument("--api-url",  default="http://localhost:3000", help="Backend API base URL")
-    parser.add_argument("--verbose",  action="store_true",         help="Print per-attribute score breakdown for each pair")
+    parser.add_argument("--token",    default=None,                    help="Bearer access token for API authentication")
+    parser.add_argument("--verbose",  action="store_true",             help="Print per-attribute score breakdown for each pair")
     args = parser.parse_args()
     if args.generate:
-        generate_lego_images(args.folder, args.api_url)
+        generate_lego_images(args.folder, args.api_url, token=args.token)
     run_benchmark(args.folder, verbose=args.verbose)

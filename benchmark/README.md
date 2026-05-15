@@ -112,6 +112,9 @@ python benchmark.py --verbose
 
 # Generate lego images from originals via the live pipeline, then benchmark
 python benchmark.py --generate --api-url http://localhost:3000
+
+# Generate with API authentication
+python benchmark.py --generate --api-url http://localhost:3000 --token <your_access_token>
 ```
 
 ### Flags
@@ -121,9 +124,18 @@ python benchmark.py --generate --api-url http://localhost:3000
 | `--folder` | `./test_images` | Path to test images folder |
 | `--generate` | off | Call the backendAPI to generate lego images before scoring |
 | `--api-url` | `http://localhost:3000` | Base URL for the backendAPI |
+| `--token` | none | Bearer access token sent as `Authorization: Bearer <token>` on generation requests |
 | `--verbose` | off | Print per-attribute scores under each pair |
 
 `--generate` POSTs each `original.*` to `/api/v1/personas`, fetches the rendered image from `/api/v1/personas/:id/image`, and saves it as `lego.png`. Reference folders are never regenerated.
+
+After all generations complete, a token usage summary is printed:
+
+```
+[generate] Token usage across 3 generation(s):
+  Total  — input: 4200  output: 810  total: 5010
+  Avg    — input: 1400.0  output: 270.0  total: 1670.0
+```
 
 ---
 
