@@ -21,6 +21,9 @@ from typing import List, Dict
 import requests
 import sys
 
+# LegoColor IDs to associate with every inserted module document.
+DEFAULT_COLORS: List[int] = [0, 1, 2, 3, 4, 5, 6, 7 ,8, 9, 10 , 11, 14, 15, 17 ,18, 19, 25 ,28 ,68, 70, 71, 72, 86, 180, 191, 216, 225, 226, 308]
+
 
 def filename_to_desc(filename: str) -> str:
     """Convert filename to human-readable description.
@@ -99,7 +102,7 @@ def generate_insert_commands(
         embeddings = get_embeddings(descriptions, embedding_url)
 
         documents = [
-            {"moduleName": filename, "desc": desc, "embedding": embedding}
+            {"moduleName": filename, "desc": desc, "embedding": embedding, "colors": DEFAULT_COLORS}
             for filename, desc, embedding in zip(filenames, descriptions, embeddings)
         ]
 
@@ -127,7 +130,7 @@ def generate_insert_commands(
 def main():
     parser = argparse.ArgumentParser(
         description="Generate MongoDB insert commands with embeddings for LEGO templates",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter, 
         epilog="""
 Examples:
   # Basic usage with defaults
