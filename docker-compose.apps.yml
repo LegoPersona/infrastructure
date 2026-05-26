@@ -11,6 +11,7 @@ services:
       MONGO_URL: "mongodb://admin:admin@mongod:27017/legopersona?authSource=admin"
       JWT_SECRET: "21e864aad92bc7354c855694509d98fc861b03a8e69435b60fba18059c81f77cebb4b0baa2145ebf273894a495c6ef59554fb796f8aa8311611e7005093a8a6c"
       JWT_REFRESH_SECRET: "027e2625db12f1ca5f101790c8252be4a97817a81e1211f89c5e4b62bdf0676f5f9f5b186306bc5a13cd002ceeac383c0a5202203020db2fea626641fc71bb63"
+      DAILY_PERSONA_LIMIT: "1000"
     networks:
       - search-community
     restart: unless-stopped
@@ -21,7 +22,8 @@ services:
     container_name: facellm
     environment:
       LLM_PROVIDER: "ollama"
-      HF_TOKEN: "YOUR TOKEN HERE"
+      OLLAMA_MODEL: "qwen3.5:latest"
+      HF_TOKEN: "YOUR TOKEN"
     ports:
       - "8002:8002"
     networks:
@@ -41,6 +43,7 @@ services:
   legoservice:
     build:
       context: ../lego-service
+      #dockerfile: Dockerfile.dev
     container_name: legoservice
     ports:
       - "8004:8004"
