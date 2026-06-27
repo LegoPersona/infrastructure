@@ -152,7 +152,7 @@ docker exec -i mongod mongosh -u admin -p admin \
 ```bash
 python3 embed_and_insert.py ../../lego-service/templates | \
   docker exec -i mongod mongosh -u admin -p admin \
-    --authenticationDatabase admin
+    --authenticationDatabase admin legopersona
 ```
 
 ## Troubleshooting
