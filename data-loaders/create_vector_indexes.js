@@ -1,7 +1,7 @@
 // Creates vector search indexes for all attribute collections.
 // Run with: Get-Content create_vector_indexes.js | docker exec -i mongod mongosh -u admin -p admin --authenticationDatabase admin legopersona
 
-const COLLECTIONS = ['beard', 'eyebrows', 'eyes', 'hair', 'nose', 'pants', 'shirt'];
+const COLLECTIONS = ['beard', 'eyebrows', 'eyes', 'glasses', 'hair', 'nose', 'pants', 'shirt'];
 
 for (const name of COLLECTIONS) {
   try {
