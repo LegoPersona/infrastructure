@@ -17,9 +17,10 @@ Three components:
   3. Color match (20%) — H and S channel Bhattacharyya coefficients averaged
      independently so a saturation match alone cannot inflate the score.
 
-Attribute categories mirror the lego-service template options:
+Attribute categories mirror the lego-service template options
+(see lego-service/templates/*):
   hair_color, hair_style, eye_color, eyebrow_color, eyebrow_shape,
-  facial_hair, nose_shape
+  facial_hair, nose_shape, glasses_style
 
 Folder structure expected:
     test_images/
@@ -36,8 +37,8 @@ Usage:
 """
 
 import argparse
-import email
 import json
+import time
 import warnings
 from pathlib import Path
 
@@ -95,13 +96,14 @@ def _clip_probs(model, device, image_emb, prompts):
 # How much each attribute contributes to the final attribute score.
 # Weights reflect visual prominence in a Lego figure.
 ATTR_WEIGHTS = {
-    "hair_color":    0.25,
-    "hair_style":    0.20,
-    "facial_hair":   0.20,
-    "eye_color":     0.15,
-    "eyebrow_color": 0.10,
-    "eyebrow_shape": 0.05,
-    "nose_shape":    0.05,
+    "hair_color":     0.22,
+    "hair_style":     0.18,
+    "facial_hair":    0.17,
+    "eye_color":      0.13,
+    "glasses_style":  0.10,
+    "eyebrow_color":  0.09,
+    "eyebrow_shape":  0.06,
+    "nose_shape":     0.05,
 }
 
 PERSON_PROMPTS = {
@@ -110,28 +112,34 @@ PERSON_PROMPTS = {
         "a photo of a person with brown hair",
         "a photo of a person with black or dark hair",
         "a photo of a person with red or auburn hair",
-        "a photo of a person with white or gray hair",
+        "a photo of a person with gray hair",
+        "a photo of a person with white hair",
     ],
     "hair_style": [
-        "a photo of a person with an afro or very curly hair",
-        "a photo of a person with short cropped or crew cut hair",
-        "a photo of a person with long wavy hair",
-        "a photo of a person with medium length straight hair",
-        "a photo of a person with a short bob hairstyle",
-        "a photo of a person with short textured or messy hair",
+        "a photo of a person with a large curly coily afro",
         "a photo of a bald person",
+        "a photo of a person with short cropped crew cut hair",
+        "a photo of a person with long wavy hair",
+        "a photo of a person with medium length straight hair parted in the middle",
+        "a photo of a person with short faded textured messy hair",
+        "a photo of a person with a short straight bob hairstyle",
+        "a photo of a person with a short textured wavy crop hairstyle",
     ],
     "eye_color": [
         "a photo of a person with black or very dark eyes",
         "a photo of a person with blue eyes",
         "a photo of a person with brown eyes",
         "a photo of a person with green eyes",
+        "a photo of a person with hazel eyes",
+        "a photo of a person with gray eyes",
     ],
     "eyebrow_color": [
         "a photo of a person with black eyebrows",
         "a photo of a person with blonde or light eyebrows",
         "a photo of a person with brown eyebrows",
         "a photo of a person with gray eyebrows",
+        "a photo of a person with white eyebrows",
+        "a photo of a person with red or auburn eyebrows",
     ],
     "eyebrow_shape": [
         "a photo of a person with curved or arched eyebrows",
@@ -140,14 +148,18 @@ PERSON_PROMPTS = {
         "a photo of a person with thick bushy eyebrows",
     ],
     "facial_hair": [
-        "a photo of a person with a full beard",
-        "a photo of a person with a goatee",
+        "a photo of a person with a full shaped medium beard",
+        "a photo of a person with a short trimmed goatee",
         "a photo of a person with no beard or facial hair",
     ],
     "nose_shape": [
-        "a photo of a person with a long narrow nose",
         "a photo of a person with a pointed or sharp nose",
         "a photo of a person with a round or button nose",
+    ],
+    "glasses_style": [
+        "a photo of a person wearing no glasses",
+        "a photo of a person wearing round glasses",
+        "a photo of a person wearing square or rectangular glasses",
     ],
 }
 
@@ -157,28 +169,34 @@ LEGO_PROMPTS = {
         "a lego minifigure with brown hair",
         "a lego minifigure with black hair",
         "a lego minifigure with red or orange hair",
-        "a lego minifigure with white or gray hair",
+        "a lego minifigure with gray hair",
+        "a lego minifigure with white hair",
     ],
     "hair_style": [
-        "a lego minifigure with an afro hairstyle",
-        "a lego minifigure with short cropped hair",
-        "a lego minifigure with long wavy hair",
-        "a lego minifigure with medium length straight hair",
-        "a lego minifigure with a short bob hairstyle",
-        "a lego minifigure with short textured hair",
+        "a lego minifigure with a large coily afro hairstyle",
         "a lego minifigure with no hair piece or bald head",
+        "a lego minifigure with short cropped crew cut hair",
+        "a lego minifigure with long wavy hair",
+        "a lego minifigure with medium length straight hair with a middle part",
+        "a lego minifigure with short faded textured messy hair",
+        "a lego minifigure with a short straight bob hairstyle",
+        "a lego minifigure with a short textured wavy crop hairstyle",
     ],
     "eye_color": [
         "a lego minifigure with black or dark eyes",
         "a lego minifigure with blue eyes",
         "a lego minifigure with brown eyes",
         "a lego minifigure with green eyes",
+        "a lego minifigure with hazel eyes",
+        "a lego minifigure with gray eyes",
     ],
     "eyebrow_color": [
         "a lego minifigure with black eyebrows",
         "a lego minifigure with blonde or light eyebrows",
         "a lego minifigure with brown eyebrows",
         "a lego minifigure with gray eyebrows",
+        "a lego minifigure with white eyebrows",
+        "a lego minifigure with red or orange eyebrows",
     ],
     "eyebrow_shape": [
         "a lego minifigure with curved or arched eyebrows",
@@ -187,14 +205,18 @@ LEGO_PROMPTS = {
         "a lego minifigure with thick eyebrows",
     ],
     "facial_hair": [
-        "a lego minifigure with a full beard",
-        "a lego minifigure with a goatee",
+        "a lego minifigure with a full shaped medium beard",
+        "a lego minifigure with a short trimmed goatee",
         "a lego minifigure with no beard",
     ],
     "nose_shape": [
-        "a lego minifigure with a long nose",
         "a lego minifigure with a pointed nose",
         "a lego minifigure with a round nose",
+    ],
+    "glasses_style": [
+        "a lego minifigure with no glasses",
+        "a lego minifigure with round glasses",
+        "a lego minifigure with square glasses",
     ],
 }
 
@@ -320,16 +342,48 @@ def print_attr_breakdown(attrs):
 # Generate
 # ---------------------------------------------------------------------------
 
-def generate_lego_images(folder, api_url, token=None):
+def _poll_generation_task(api_url, headers, job_id, poll_interval, poll_timeout, verbose):
+    """Polls the async generation task until it reaches a terminal status.
+
+    Returns (status_payload, error) — error is None on COMPLETED, otherwise a
+    human-readable reason (FAILED/CANCELLED/timeout).
+    """
+    deadline = time.monotonic() + poll_timeout
+    while True:
+        resp = requests.get(f"{api_url}/api/v1/personas/tasks/{job_id}/status", headers=headers, timeout=30)
+        resp.raise_for_status()
+        task = resp.json()
+        status = task.get("status")
+
+        if verbose:
+            pct = task.get("percentCompleteEstimate", 0)
+            desc = task.get("actionDescription") or status
+            print(f"    [poll] {status} {pct}% — {desc}")
+
+        if status == "COMPLETED":
+            return task, None
+        if status in ("FAILED", "CANCELLED"):
+            return task, task.get("errorMessage") or status
+
+        if time.monotonic() >= deadline:
+            return task, f"timed out after {poll_timeout}s (last status: {status})"
+
+        time.sleep(poll_interval)
+
+
+def generate_lego_images(folder, api_url, token=None, poll_interval=2.0, poll_timeout=300, verbose=False):
     root = Path(folder)
     test_dirs = [d for d in sorted(root.iterdir()) if d.is_dir() and not d.name.startswith("_ref")]
     if not test_dirs:
         print("[generate] No test folders found.")
         return
 
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
     total_input = total_output = total_tokens = 0
     token_counts = []
 
+    # Generations run strictly one at a time (submit → poll to completion →
+    # download) so the backend models are never hit concurrently.
     for person_dir in test_dirs:
         orig = next((person_dir / f for f in ("original.jpg", "original.png") if (person_dir / f).exists()), None)
         if not orig:
@@ -337,28 +391,38 @@ def generate_lego_images(folder, api_url, token=None):
             continue
         try:
             mime = "image/jpeg" if orig.suffix.lower() == ".jpg" else "image/png"
-            headers = {"Authorization": f"Bearer {token}"} if token else {}
             with open(orig, "rb") as f:
                 resp = requests.post(f"{api_url}/api/v1/personas",
                                      files={"image": (orig.name, f, mime)},
-                                     headers=headers, timeout=120)
+                                     headers=headers, timeout=30)
             resp.raise_for_status()
-            ct  = resp.headers.get("Content-Type", "")
-            msg = email.message_from_bytes(b"Content-Type: " + ct.encode() + b"\r\n\r\n" + resp.content)
-            pid = None
-            tokens_used = None
-            for part in msg.walk():
-                if part.get_content_type() == "application/json":
-                    data = json.loads(part.get_payload(decode=True))
-                    pid = data.get("id")
-                    tokens_used = data.get("tokens_used")
-                    break
-            if not pid:
-                print(f"[generate] {person_dir.name} — could not extract persona id, skipping")
+            job_id = resp.json().get("jobId")
+            if not job_id:
+                print(f"[generate] {person_dir.name} — no jobId in response, skipping")
                 continue
-            img_resp = requests.get(f"{api_url}/api/v1/personas/{pid}/image", headers=headers, timeout=120)
+
+            task, error = _poll_generation_task(api_url, headers, job_id, poll_interval, poll_timeout, verbose)
+            if error:
+                print(f"[generate] {person_dir.name} — generation {task.get('status')}: {error}")
+                continue
+
+            persona_id = task.get("resultPersonaId")
+            if not persona_id:
+                print(f"[generate] {person_dir.name} — completed with no resultPersonaId, skipping")
+                continue
+
+            persona_resp = requests.get(f"{api_url}/api/v1/personas/{persona_id}", headers=headers, timeout=30)
+            persona_resp.raise_for_status()
+            image_path = persona_resp.json().get("personaImage")
+            if not image_path:
+                print(f"[generate] {person_dir.name} — persona has no personaImage, skipping")
+                continue
+
+            img_resp = requests.get(f"{api_url}{image_path}", headers=headers, timeout=120)
             img_resp.raise_for_status()
             (person_dir / "lego.png").write_bytes(img_resp.content)
+
+            tokens_used = task.get("tokens_used")
             if tokens_used:
                 inp, out, tot = tokens_used.get("input", 0), tokens_used.get("output", 0), tokens_used.get("total", 0)
                 total_input   += inp
@@ -452,7 +516,11 @@ if __name__ == "__main__":
     parser.add_argument("--api-url",  default="http://localhost:3000", help="Backend API base URL")
     parser.add_argument("--token",    default=None,                    help="Bearer access token for API authentication")
     parser.add_argument("--verbose",  action="store_true",             help="Print per-attribute score breakdown for each pair")
+    parser.add_argument("--poll-interval", type=float, default=2.0,    help="Seconds between generation status polls")
+    parser.add_argument("--poll-timeout",  type=float, default=300.0,  help="Max seconds to wait for a single generation")
     args = parser.parse_args()
     if args.generate:
-        generate_lego_images(args.folder, args.api_url, token=args.token)
+        generate_lego_images(args.folder, args.api_url, token=args.token,
+                              poll_interval=args.poll_interval, poll_timeout=args.poll_timeout,
+                              verbose=args.verbose)
     run_benchmark(args.folder, verbose=args.verbose)
