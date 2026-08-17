@@ -2,7 +2,10 @@ services:
 
   backendapi:
     build:
-      context: ../backendAPI/backendAPI
+      context: ..
+      dockerfile: backendAPI/backendAPI/Dockerfile.fullstack
+      args:
+        VITE_GOOGLE_CLIENT_ID: "865828844479-bbe8qi71ql94036tdpfts1kgrritjs6o.apps.googleusercontent.com"
     container_name: backendapi
     ports:
       - "8001:8001"
@@ -11,7 +14,18 @@ services:
       MONGO_URL: "mongodb://admin:admin@mongod:27017/legopersona?authSource=admin"
       JWT_SECRET: "21e864aad92bc7354c855694509d98fc861b03a8e69435b60fba18059c81f77cebb4b0baa2145ebf273894a495c6ef59554fb796f8aa8311611e7005093a8a6c"
       JWT_REFRESH_SECRET: "027e2625db12f1ca5f101790c8252be4a97817a81e1211f89c5e4b62bdf0676f5f9f5b186306bc5a13cd002ceeac383c0a5202203020db2fea626641fc71bb63"
-      DAILY_PERSONA_LIMIT: "1000"
+      DAILY_PERSONA_LIMIT: "5"
+      NUM_COLOR_CANDIDATES: "1"
+      HTTPS_ENABLED: "false"
+      SSL_CERT_PATH: "/etc/ssl/cs/CSB.crt"
+      SSL_KEY_PATH: "/etc/ssl/cs/myserver.key"
+      GOOGLE_CLIENT_ID: "865828844479-bbe8qi71ql94036tdpfts1kgrritjs6o.apps.googleusercontent.com"
+    volumes:
+      # Named volumes so uploaded/generated images survive container rebuilds.
+      # Mounted on the subdirs only — /app/public itself holds the baked-in frontend build.
+      - persona-images:/app/public/personas
+      - profile-images:/app/public/profiles
+      - /etc/ssl/cs:/etc/ssl/cs:ro
     networks:
       - search-community
     restart: unless-stopped
@@ -22,7 +36,9 @@ services:
     container_name: facellm
     environment:
       LLM_PROVIDER: "ollama"
-      OLLAMA_MODEL: "qwen3.5:latest"
+      OLLAMA_MODEL: "gemma4:31b"
+      OLLAMA_BASE_URL: "https://ollama.com/v1"
+      OLLAMA_API_KEY: "c897c459b2244e7e8f411395fe278697.9M-vEoBhyLI_ueYzKJJtoBrg"
       HF_TOKEN: "YOUR TOKEN"
     ports:
       - "8002:8002"
@@ -53,18 +69,10 @@ services:
       - search-community
     restart: unless-stopped
 
-  frontend:
-    build:
-      context: ../frontend/legopersona
-      args:
-        VITE_API_BASE_URL: http://localhost:8001/api
-    container_name: frontend
-    ports:
-      - "8000:80"
-    networks:
-      - search-community
-    restart: unless-stopped
-
 networks:
   search-community:
     external: true
+
+volumes:
+  persona-images:
+  profile-images:
